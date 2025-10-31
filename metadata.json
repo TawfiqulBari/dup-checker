@@ -1,0 +1,5 @@
+{
+  "name": "Dup-Checker",
+  "description": "A modern, single-page web application that allows users to find and delete duplicate image and video files from a selected folder on their local machine.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,11 @@
+services:
+  dup-checker-web:
+    build: .
+    container_name: dup-checker-web
+    restart: unless-stopped
+    networks:
+      - traefik-proxy
+
+networks:
+  traefik-proxy:
+    external: true

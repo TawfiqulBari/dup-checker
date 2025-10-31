@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+dist
+.git
+.gitignore
+.vscode
+.env.local
+.env
+README.md
+apps.yml
+Caddyfile
+plans
+metadata.json
+
