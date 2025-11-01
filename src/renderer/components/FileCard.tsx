@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { FileWithHandle } from '../types';
+import { FileWithHandle } from '../../shared/types';
 
 interface FileCardProps {
   file: FileWithHandle;

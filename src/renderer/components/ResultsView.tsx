@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { DuplicateGroup } from '../types';
+import { DuplicateGroup } from '../../shared/types';
+import { hasNativeFileOperations } from '../../shared/platformDetection';
 import DuplicateGroupCard from './DuplicateGroupCard';
 import InstructionsModal from './InstructionsModal';
 
@@ -17,6 +18,54 @@ const ResultsView: React.FC<ResultsViewProps> = ({
   onNewScan,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const canDeleteNatively = hasNativeFileOperations();
+
+  const handleDeleteFiles = async () => {
+    if (!canDeleteNatively || !window.electronAPI) {
+      // Fallback to clipboard copy for web version
+      handleCopyPaths();
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const pathsToDelete = duplicateGroups
+        .flat()
+        .filter((f) => selectedFiles.has(f.id))
+        .map((f) => f.path);
+
+      const result = await window.electronAPI.deleteFiles(pathsToDelete);
+
+      if (result.success) {
+        alert(result.message);
+
+        // Remove deleted files from selection
+        const newSelection = new Set(selectedFiles);
+        pathsToDelete.forEach((path) => {
+          const fileToRemove = duplicateGroups
+            .flat()
+            .find((f) => f.path === path);
+          if (fileToRemove) {
+            newSelection.delete(fileToRemove.id);
+          }
+        });
+        onSelectionChange(newSelection);
+
+        // Refresh the scan to update the view
+        setTimeout(() => {
+          alert('Please run a new scan to see updated results.');
+        }, 500);
+      } else {
+        alert(`Deletion failed: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete files. See console for details.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleCopyPaths = () => {
     const pathsToCopy = duplicateGroups.flat()
@@ -86,18 +135,30 @@ const ResultsView: React.FC<ResultsViewProps> = ({
             >
               New Scan
             </button>
-            <button
-              onClick={handleCopyPaths}
-              disabled={selectedFiles.size === 0}
-              className="px-6 py-2 bg-sky-600 text-white font-bold rounded-md shadow-md hover:bg-sky-700 disabled:bg-sky-300 dark:disabled:bg-sky-800 disabled:cursor-not-allowed transition"
-            >
-              Copy Paths ({selectedFiles.size})
-            </button>
+            {canDeleteNatively ? (
+              <button
+                onClick={handleDeleteFiles}
+                disabled={selectedFiles.size === 0 || isDeleting}
+                className="px-6 py-2 bg-red-600 text-white font-bold rounded-md shadow-md hover:bg-red-700 disabled:bg-red-300 dark:disabled:bg-red-800 disabled:cursor-not-allowed transition"
+              >
+                {isDeleting ? 'Deleting...' : `Delete Selected (${selectedFiles.size})`}
+              </button>
+            ) : (
+              <button
+                onClick={handleCopyPaths}
+                disabled={selectedFiles.size === 0}
+                className="px-6 py-2 bg-sky-600 text-white font-bold rounded-md shadow-md hover:bg-sky-700 disabled:bg-sky-300 dark:disabled:bg-sky-800 disabled:cursor-not-allowed transition"
+              >
+                Copy Paths ({selectedFiles.size})
+              </button>
+            )}
           </div>
         </div>
       </div>
        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-        <strong>How to delete files:</strong> Select the duplicates you want to remove, click "Copy Paths", and follow the on-screen instructions to use your system's terminal.
+        <strong>How to delete files:</strong> {canDeleteNatively
+          ? 'Select the duplicates you want to remove and click "Delete Selected". A confirmation dialog will appear before deletion.'
+          : 'Select the duplicates you want to remove, click "Copy Paths", and follow the on-screen instructions to use your system\'s terminal.'}
       </p>
 
       <div className="space-y-8">

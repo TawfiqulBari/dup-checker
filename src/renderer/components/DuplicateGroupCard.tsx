@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { DuplicateGroup, FileWithHandle } from '../types';
+import { DuplicateGroup, FileWithHandle } from '../../shared/types';
 import FileCard from './FileCard';
 
 interface DuplicateGroupCardProps {

@@ -3,10 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "./dist-electron/main/index.js",
   "scripts": {
     "dev": "vite",
+    "dev:electron": "electron-vite dev",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:electron": "electron-vite build && electron-builder",
+    "preview": "vite preview",
+    "preview:electron": "electron-vite preview"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -15,8 +19,33 @@
   "devDependencies": {
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/node": "^20.10.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0",
+    "electron-vite": "^2.0.0",
     "typescript": "^5.5.3",
     "vite": "^5.3.1"
+  },
+  "build": {
+    "appId": "com.dupchecker.app",
+    "productName": "Dup-Checker",
+    "directories": {
+      "output": "dist-electron/packaged"
+    },
+    "files": [
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb", "rpm"],
+      "category": "Utility"
+    }
   }
 }

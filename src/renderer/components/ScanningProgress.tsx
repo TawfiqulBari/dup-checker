@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ScanProgress } from '../types';
+import { ScanProgress } from '../../shared/types';
 
 interface ScanningProgressProps {
   progress: ScanProgress;

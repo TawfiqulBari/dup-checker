@@ -1,6 +1,6 @@
 
 // FIX: Import missing types 'DuplicateGroup' and 'ScanProgress'.
-import { FileWithHandle, DuplicateGroup, ScanProgress } from '../types';
+import { FileWithHandle, DuplicateGroup, ScanProgress } from '../../shared/types';
 
 const HASH_WIDTH = 9;
 const HASH_HEIGHT = 8;

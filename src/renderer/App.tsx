@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { DuplicateGroup, FileWithHandle, ScanProgress, ScanState } from './types';
+import { DuplicateGroup, FileWithHandle, ScanProgress, ScanState } from '../shared/types';
 import { findDuplicates } from './services/hashingService';
 import WelcomeScreen from './components/WelcomeScreen';
 import ScanningProgress from './components/ScanningProgress';
