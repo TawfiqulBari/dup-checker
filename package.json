@@ -2,13 +2,21 @@
   "name": "dup-checker",
   "private": true,
   "version": "0.1.0",
+  "description": "Duplicate file detection application for images and videos using perceptual hashing",
+  "author": {
+    "name": "Tawfiqul Bari",
+    "email": "tawfiqul@example.com"
+  },
   "type": "module",
-  "main": "./dist-electron/main/index.js",
+  "main": "./out/main/index.js",
   "scripts": {
     "dev": "vite",
     "dev:electron": "electron-vite dev",
     "build": "vite build",
     "build:electron": "electron-vite build && electron-builder",
+    "build:electron:win": "electron-vite build && electron-builder --win",
+    "build:electron:linux": "electron-vite build && electron-builder --linux",
+    "build:electron:mac": "electron-vite build && electron-builder --mac",
     "preview": "vite preview",
     "preview:electron": "electron-vite preview"
   },
@@ -31,10 +39,10 @@
     "appId": "com.dupchecker.app",
     "productName": "Dup-Checker",
     "directories": {
-      "output": "dist-electron/packaged"
+      "output": "release"
     },
     "files": [
-      "dist-electron/**/*"
+      "out/**/*"
     ],
     "mac": {
       "target": ["dmg", "zip"],
