@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import ResultsView from './ResultsView';
 import { DuplicateGroup, FileWithHandle } from '../types';
 import { removeFile, validateFile } from '../services/folderAccess';
+import { ReviewState } from '../services/sessionTypes';
 
 vi.mock('../services/folderAccess', () => ({ removeFile: vi.fn().mockResolvedValue(undefined), validateFile: vi.fn().mockResolvedValue(undefined) }));
 beforeAll(() => { HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); }; });
@@ -57,4 +58,23 @@ it('does not remove files when confirmation is cancelled', async () => {
   vi.spyOn(window, 'confirm').mockReturnValue(false);
   await user.click(screen.getByRole('button', { name: 'Remove selected (1)' }));
   expect(removeFile).not.toHaveBeenCalled();
+});
+
+it('restores keeper choices and review filters after reopening results', async () => {
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  const user = userEvent.setup();
+  const groups = [[file('a', 10, 'same'), file('b', 10, 'same')]];
+  let snapshot: ReviewState = {};
+  const onReviewChange = (state: ReviewState) => { snapshot = state; };
+  const props = { duplicateGroups: groups, selectedFiles: new Set<string>(), onSelectionChange: vi.fn(), onNewScan: vi.fn(), onFilesRemoved: vi.fn(), onReviewChange };
+  const mounted = render(<ResultsView {...props} />);
+  await user.click(screen.getByRole('button', { name: 'Keep this file' }));
+  await user.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+  await user.selectOptions(screen.getByLabelText('Review status'), 'reviewed');
+  mounted.unmount();
+  render(<ResultsView {...props} initialReview={snapshot} />);
+  expect(screen.queryByRole('checkbox', { name: 'Select photos/b' })).toBeNull();
+  expect(screen.getByRole('checkbox', { name: 'Select photos/a' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Reviewed ✓' }).getAttribute('aria-pressed')).toBe('true');
+  expect((screen.getByLabelText('Review status') as HTMLSelectElement).value).toBe('reviewed');
 });

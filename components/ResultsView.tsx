@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DuplicateGroup } from '../types';
 import DuplicateGroupCard from './DuplicateGroupCard';
 import InstructionsModal from './InstructionsModal';
@@ -6,6 +6,7 @@ import { removeFile, validateFile } from '../services/folderAccess';
 import { sortGroup, groupKey, isExactGroup } from '../services/selection';
 import ComparisonModal from './ComparisonModal';
 import { NativeFile } from '../services/desktop';
+import { ReviewState } from '../services/sessionTypes';
 
 interface ResultsViewProps {
   duplicateGroups: DuplicateGroup[];
@@ -13,6 +14,9 @@ interface ResultsViewProps {
   onSelectionChange: (newSelection: Set<string>) => void;
   onNewScan: () => void;
   onFilesRemoved: (removed: Set<string>) => void;
+  initialReview?: ReviewState;
+  onReviewChange?: (review: ReviewState) => void;
+  onUpdateChanges?: () => void;
 }
 
 const ResultsView: React.FC<ResultsViewProps> = ({
@@ -21,14 +25,37 @@ const ResultsView: React.FC<ResultsViewProps> = ({
   onSelectionChange,
   onNewScan,
   onFilesRemoved,
+  initialReview = {},
+  onReviewChange,
+  onUpdateChanges,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [removalMessage, setRemovalMessage] = useState('');
-  const [keepers, setKeepers] = useState<Record<string, string>>({});
-  const [matchFilter, setMatchFilter] = useState('all');
-  const [mediaFilter, setMediaFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  const [keepers, setKeepers] = useState<Record<string, string>>(initialReview.keepers || {});
+  const [matchFilter, setMatchFilter] = useState(initialReview.matchFilter || 'all');
+  const [mediaFilter, setMediaFilter] = useState(initialReview.mediaFilter || 'all');
+  const [search, setSearch] = useState(initialReview.search || '');
+  const [reviewed, setReviewed] = useState<string[]>(initialReview.reviewed || []);
+  const [reviewFilter, setReviewFilter] = useState(initialReview.reviewFilter || 'all');
+  const reviewSnapshot = useRef<ReviewState>({});
+  const restoredScroll = useRef(false);
+  useEffect(() => {
+    const validKeys = new Set(duplicateGroups.map(groupKey));
+    reviewSnapshot.current = { keepers, matchFilter, mediaFilter, search, reviewFilter, reviewed: reviewed.filter(key => validKeys.has(key)), scrollY: restoredScroll.current ? window.scrollY : initialReview.scrollY || 0 };
+    onReviewChange?.(reviewSnapshot.current);
+  }, [keepers, matchFilter, mediaFilter, search, reviewFilter, reviewed, duplicateGroups, onReviewChange]);
+  useEffect(() => {
+    if (!onReviewChange) return;
+    window.scrollTo(0, initialReview.scrollY || 0);
+    restoredScroll.current = true;
+    const savePosition = () => { reviewSnapshot.current = { ...reviewSnapshot.current, scrollY: window.scrollY }; onReviewChange(reviewSnapshot.current); };
+    let timer: ReturnType<typeof setTimeout>;
+    const scroll = () => { clearTimeout(timer); timer = setTimeout(savePosition, 250); };
+    window.addEventListener('scroll', scroll);
+    window.addEventListener('beforeunload', savePosition);
+    return () => { clearTimeout(timer); window.removeEventListener('scroll', scroll); window.removeEventListener('beforeunload', savePosition); };
+  }, [onReviewChange]);
   const [comparisonKey, setComparisonKey] = useState<string | null>(null);
   const ordered = (group: DuplicateGroup) => sortGroup(group, keepers[groupKey(group)]);
   const chooseKeeper = (group: DuplicateGroup, id: string) => {
@@ -39,6 +66,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({
     onSelectionChange(selection);
   };
   const visibleGroups = duplicateGroups.filter(group =>
+    (reviewFilter === 'all' || (reviewFilter === 'reviewed' ? reviewed.includes(groupKey(group)) : !reviewed.includes(groupKey(group)))) &&
     (matchFilter === 'all' || (matchFilter === 'exact' ? isExactGroup(group) : !isExactGroup(group))) &&
     (mediaFilter === 'all' || group.some(file => file.file.type.startsWith(mediaFilter + '/'))) &&
     (!search.trim() || group.some(file => file.path.toLowerCase().includes(search.trim().toLowerCase()))),
@@ -111,6 +139,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({
         >
           Scan Another Folder
         </button>
+        {onUpdateChanges && <button onClick={onUpdateChanges} className="block mx-auto mt-4 text-indigo-600 dark:text-indigo-400">Update changes</button>}
       </div>
     );
   }
@@ -142,9 +171,11 @@ const ResultsView: React.FC<ResultsViewProps> = ({
             </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Selected {selectedFiles.size} files ({formatBytes(potentialSpaceSaved)})
+              {' · '}{duplicateGroups.filter(group => reviewed.includes(groupKey(group))).length}/{duplicateGroups.length} sets reviewed
             </p>
           </div>
           <div className="flex gap-2">
+            {onUpdateChanges && <button onClick={onUpdateChanges} disabled={isRemoving} className="px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-md">Update changes</button>}
              <button
               onClick={onNewScan}
               disabled={isRemoving}
@@ -170,6 +201,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({
       </p>
 
       <fieldset disabled={isRemoving} className="flex flex-wrap items-end gap-4 p-4 mb-6 bg-white dark:bg-slate-800 rounded-lg">
+        <label className="text-sm">Review status<select value={reviewFilter} onChange={event => setReviewFilter(event.target.value)} className="block mt-1 p-2 border rounded bg-white dark:bg-slate-900"><option value="all">All sets</option><option value="unreviewed">Not reviewed yet</option><option value="reviewed">Reviewed</option></select></label>
         <label className="text-sm">Match type<select value={matchFilter} onChange={event => setMatchFilter(event.target.value)} className="block mt-1 p-2 border rounded bg-white dark:bg-slate-900"><option value="all">All matches</option><option value="exact">Exact copies</option><option value="similar">Visually similar</option></select></label>
         <label className="text-sm">Media<select value={mediaFilter} onChange={event => setMediaFilter(event.target.value)} className="block mt-1 p-2 border rounded bg-white dark:bg-slate-900"><option value="all">Images and videos</option><option value="image">Images</option><option value="video">Videos</option></select></label>
         <label className="text-sm flex-1">Find a file or folder<input value={search} onChange={event => setSearch(event.target.value)} type="search" placeholder="Search paths…" className="block w-full mt-1 p-2 border rounded bg-white dark:bg-slate-900" /></label>
@@ -188,6 +220,8 @@ const ResultsView: React.FC<ResultsViewProps> = ({
             keeperId={keepers[groupKey(group)]}
             onKeep={id => chooseKeeper(group, id)}
             onCompare={() => setComparisonKey(groupKey(group))}
+            reviewed={reviewed.includes(groupKey(group))}
+            onToggleReviewed={() => setReviewed(current => current.includes(groupKey(group)) ? current.filter(key => key !== groupKey(group)) : [...current, groupKey(group)])}
           />
         ))}
       </fieldset>

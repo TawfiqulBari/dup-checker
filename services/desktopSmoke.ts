@@ -1,5 +1,5 @@
 import { accelerationSelfTest } from './gpu';
-import { chooseNativeFolder, nativeUrl } from './desktop';
+import { chooseNativeFolder, nativeUrl, NativeFile, restoreSessionFiles } from './desktop';
 import { readFolder } from './folderAccess';
 import { findDuplicates } from './hashingService';
 
@@ -45,5 +45,22 @@ export async function runDesktopSmoke() {
   video.removeAttribute('src'); video.load(); URL.revokeObjectURL(videoUrl);
   let unauthorizedRejected = false;
   try { await window.desktopAPI!.trashFile('not-authorized'); } catch { unauthorizedRejected = true; }
-  return { ok: gpu.ok && nativeAccess && unauthorizedRejected && imageScan && videoDecode, gpu, nativeAccess, imageScan, videoDecode, unauthorizedRejected, rendererLoaded: !!document.querySelector('h1') };
+  const api = window.desktopAPI!;
+  const session = await api.beginSession(files.map(file => ({ id: file.id, nativeId: (file.file as NativeFile).nativeId!, path: file.path })));
+  const key = files.map(file => file.id).sort().join('\0');
+  await api.saveSession(session.id, { status: 'done', groups: [files.map(file => file.id)], selectedFiles: [files[1].id], review: { keepers: { [key]: files[0].id }, reviewed: [key], search: 'saved', scrollY: 300 } });
+  await api.resetScan();
+  const restored = await api.loadSession(session.id);
+  const restoredFiles = await restoreSessionFiles(restored);
+  const persistedReview = restored.selectedFiles[0] === files[1].id && restored.review.reviewed?.[0] === key && restored.review.scrollY === 300;
+  const cacheReused = restoredFiles.every(file => (file.file as NativeFile).cachedExact);
+  const unchanged = await api.refreshSession(session.id);
+  await api.mutateSmokeFixtures(Array.from(new Uint8Array(await png.arrayBuffer())));
+  const changed = await api.refreshSession(session.id);
+  const deltaCorrect = unchanged.delta?.unchanged === 2 && changed.delta?.changed === 1 && changed.delta?.removed === 1 && changed.delta?.added === 1 && changed.review.reviewed?.length === 0;
+  const updatedFiles = await restoreSessionFiles(changed);
+  const updatedGroups = await findDuplicates(updatedFiles, () => {});
+  const cachedVisuals = await Promise.all(updatedFiles.map(file => api.getCachedFile((file.file as NativeFile).nativeId!)));
+  const visualCache = cachedVisuals.every(cache => typeof cache.visual === 'string' && cache.visual.length === 64) && updatedGroups.length === 1;
+  return { ok: gpu.ok && nativeAccess && unauthorizedRejected && imageScan && videoDecode && persistedReview && cacheReused && deltaCorrect && visualCache, gpu, nativeAccess, imageScan, videoDecode, unauthorizedRejected, persistedReview, cacheReused, deltaCorrect, visualCache, rendererLoaded: !!document.querySelector('h1') };
 }

@@ -1,5 +1,5 @@
 import { FileWithHandle } from '../types';
-import { chooseNativeFolder } from './desktop';
+import { chooseNativeFolder, NativeFile } from './desktop';
 
 type DirectoryPicker = (options: { mode: 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
 export const getDirectoryPicker = (): DirectoryPicker | undefined =>
@@ -17,7 +17,7 @@ export async function readFolder(directory: FileSystemDirectoryHandle, signal: A
         const handle = entry as FileSystemFileHandle;
         const file = await handle.getFile();
         if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
-        files.push({ id: entryPath, path: entryPath, file, handle, parentHandle: folder, metadata: { size: file.size }, thumbnail: '' });
+        files.push({ id: (file as NativeFile).nativeId || entryPath, path: entryPath, file, handle, parentHandle: folder, metadata: { size: file.size }, thumbnail: '' });
       }
     }
   };

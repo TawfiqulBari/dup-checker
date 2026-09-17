@@ -8,6 +8,18 @@ Download the **Setup** installer or **Portable** executable from [Releases](http
 
 Select one folder, or choose **Compare two folders**. Review exact/similar matches, use **Compare** for a larger view, choose which copy to **Keep**, and use **Recycle selected** to move unwanted copies to the Windows Recycle Bin. A native confirmation is required. If recycling fails, the app reports the failure and does not fall back to permanent deletion.
 
+### Saved scans and incremental updates
+
+Desktop scans and review decisions are saved automatically on this computer. From **Saved scans**, choose **Open results** to return to a completed review without rescanning, or **Continue scan** to finish an interrupted scan. Use **Mark reviewed** and the **Not reviewed yet** filter to work through a large collection over multiple sessions. Keeper choices, selections, filters, and scroll position are restored.
+
+**Pause and save** becomes available after initial folder discovery. Each completed file hash is persisted, so closing the app during hashing does not discard completed work. An unfinished file restarts; match comparisons are rebuilt when resuming rather than checkpointed at an individual comparison.
+
+**Update changes** checks both folders' current file metadata. New and changed files are reprocessed; removed files disappear from the refreshed results. Unchanged exact and visual hashes are reused. If nothing changed and the prior scan finished without issues, the saved match groups are reused immediately. Reviews involving changed files are cleared so those matches can be checked again.
+
+Opening saved results shows the previous snapshot; use Update changes for a current view. Files are independently validated again before removal. Cache validity uses path, size, modification/change timestamps, file identity, and the hashing algorithm version.
+
+The local SQLite database stores file metadata, hashes, match groups, and review choices, not copies of your media. **Forget saved results** removes that saved session while retaining reusable hashes. These persistence features apply to the desktop app; the browser version remains session-only.
+
 ### Adaptive GPU processing
 
 The app requests a high-performance WebGPU adapter, identifies the selected GPU, compiles its comparison kernel, and verifies its output against CPU results before enabling acceleration. The header shows the detected device and processing status. Comparison batches with at least 256 hashes use the GPU; smaller batches stay on CPU to avoid transfer overhead. Video frames use the same comparison kernel. GPU failure or unavailable hardware triggers CPU fallback.

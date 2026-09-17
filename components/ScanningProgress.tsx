@@ -5,9 +5,10 @@ import { ScanProgress } from '../types';
 interface ScanningProgressProps {
   progress: ScanProgress;
   onCancel: () => void;
+  canPause?: boolean;
 }
 
-const ScanningProgress: React.FC<ScanningProgressProps> = ({ progress, onCancel }) => {
+const ScanningProgress: React.FC<ScanningProgressProps> = ({ progress, onCancel, canPause }) => {
   const percentage = progress.total > 0 ? (progress.processed / progress.total) * 100 : 0;
 
   return (
@@ -23,7 +24,8 @@ const ScanningProgress: React.FC<ScanningProgressProps> = ({ progress, onCancel 
       <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
         {progress.processed} / {progress.total} files
       </p>
-      <button onClick={onCancel} className="mt-6 px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-md">Cancel scan</button>
+      {progress.cachedFiles !== undefined && <p className="mt-3 text-sm">{progress.cachedFiles} unchanged file hashes available in cache.</p>}
+      <button onClick={onCancel} className="mt-6 px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-md">{canPause ? 'Pause and save' : 'Cancel scan'}</button>
     </div>
   );
 };

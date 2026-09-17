@@ -8,6 +8,17 @@ const HASH_WIDTH = 9;
 const HASH_HEIGHT = 8;
 const VIDEO_FRAMES_TO_CAPTURE = 10;
 
+async function cachedVisual(file: File, calculate: () => Promise<string | string[]>): Promise<string | string[]> {
+  const nativeId = (file as NativeFile).nativeId;
+  const api = typeof window !== 'undefined' ? window.desktopAPI : undefined;
+  if (!nativeId || !api) return calculate();
+  const cached = await api.getCachedFile(nativeId);
+  if (cached.visual !== undefined) return cached.visual;
+  const visual = await calculate();
+  await api.cacheVisual(nativeId, visual);
+  return visual;
+}
+
 // dHash implementation for images
 const calculateDHash = async (file: File): Promise<string> => {
   const canvas = document.createElement('canvas');
@@ -100,6 +111,7 @@ export const findDuplicates = async (
   const processedFiles = new Set<string>();
   const totalFiles = files.length;
   let processedCount = 0;
+  const cachedFiles = files.filter(file => (file.file as NativeFile).cachedExact).length;
 
   // Store hashes to avoid recalculating
   const fileHashes = new Map<string, string>();
@@ -107,7 +119,7 @@ export const findDuplicates = async (
 
   const updateProgress = (status: string) => {
     processedCount++;
-    setProgress({ status, processed: processedCount, total: totalFiles });
+    setProgress({ status, processed: processedCount, total: totalFiles, cachedFiles });
   };
 
   // Step 1: Find exact duplicates with file hashing
@@ -151,7 +163,7 @@ export const findDuplicates = async (
     const file = imageFiles[i];
     checkCancelled(signal);
     try {
-      perceptualHashes.set(file.id, await calculateDHash(file.file));
+      perceptualHashes.set(file.id, await cachedVisual(file.file, () => calculateDHash(file.file)));
     } catch (error) {
       checkCancelled(signal);
       onWarning('Visual comparison unavailable for ' + file.path);
@@ -165,7 +177,7 @@ export const findDuplicates = async (
     checkCancelled(signal);
     const file = videoFiles[i];
     try {
-      perceptualHashes.set(file.id, await calculateVideoHashes(file.file, signal));
+      perceptualHashes.set(file.id, await cachedVisual(file.file, () => calculateVideoHashes(file.file, signal)));
     } catch (e) {
       checkCancelled(signal);
       onWarning('Visual comparison unavailable for ' + file.path);
@@ -223,6 +235,6 @@ export const findDuplicates = async (
   }
 
   checkCancelled(signal);
-  setProgress({ status: 'Done', processed: totalFiles, total: totalFiles });
+  setProgress({ status: 'Done', processed: totalFiles, total: totalFiles, cachedFiles });
   return allDuplicates;
 };

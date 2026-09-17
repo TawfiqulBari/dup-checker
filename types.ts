@@ -20,6 +20,7 @@ export interface ScanProgress {
   status: string;
   processed: number;
   total: number;
+  cachedFiles?: number;
 }
 
 export type ScanState = 'idle' | 'scanning' | 'done';
