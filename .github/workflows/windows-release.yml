@@ -1,0 +1,46 @@
+name: Windows desktop release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build
+        required: true
+        default: v0.3.0
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run regression tests
+        run: npm test
+      - name: Build Windows packages
+        run: npm run build:windows
+      - name: Check desktop CPU fallback
+        run: npm run test:desktop -- --disable-gpu
+      - name: Upload and publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw 'Invalid release tag' }
+          $artifacts = @(Get-ChildItem -LiteralPath release -Filter *.exe)
+          if ($artifacts.Count -ne 2) { throw 'Expected installer and portable executable' }
+          $checksums = $artifacts | ForEach-Object { "$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+          $checksums | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding utf8
+          $uploadPaths = @($artifacts.FullName) + @('release/SHA256SUMS.txt')
+          gh release upload $env:RELEASE_TAG @uploadPaths --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          gh release edit $env:RELEASE_TAG --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
