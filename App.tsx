@@ -7,6 +7,8 @@ import ResultsView from './components/ResultsView';
 import { getDirectoryPicker, readFolder } from './services/folderAccess';
 import FolderComparisonSetup from './components/FolderComparisonSetup';
 import { spansFolders } from './services/selection';
+import { nativeUrl } from './services/desktop';
+import AccelerationStatus from './components/AccelerationStatus';
 
 const App: React.FC = () => {
   const [scanState, setScanState] = useState<ScanState>('idle');
@@ -26,6 +28,7 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = useCallback(() => {
+    void window.desktopAPI?.resetScan();
     controllerRef.current?.abort();
     releaseUrls();
     setError('');
@@ -62,8 +65,8 @@ const App: React.FC = () => {
       controller.signal.throwIfAborted();
       // Only retain previews for files actually displayed in results.
       foundDuplicates.flat().forEach(file => {
-        file.thumbnail = URL.createObjectURL(file.file);
-        urlsRef.current.push(file.thumbnail);
+        file.thumbnail = nativeUrl(file.file) || URL.createObjectURL(file.file);
+        if (!nativeUrl(file.file)) urlsRef.current.push(file.thumbnail);
       });
       setDuplicates(foundDuplicates);
       setWarnings(scanWarnings);
@@ -141,6 +144,7 @@ const App: React.FC = () => {
       />
       <header className="py-4 px-6 bg-white dark:bg-slate-800/50 shadow-sm">
         <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">Dup-Checker</h1>
+        <AccelerationStatus />
       </header>
       <main className="container mx-auto p-4 md:p-8">
         {error && <p role="alert" className="p-4 mb-4 bg-amber-100 text-amber-900 rounded-lg">{error}</p>}

@@ -5,6 +5,7 @@ import InstructionsModal from './InstructionsModal';
 import { removeFile, validateFile } from '../services/folderAccess';
 import { sortGroup, groupKey, isExactGroup } from '../services/selection';
 import ComparisonModal from './ComparisonModal';
+import { NativeFile } from '../services/desktop';
 
 interface ResultsViewProps {
   duplicateGroups: DuplicateGroup[];
@@ -49,7 +50,9 @@ const ResultsView: React.FC<ResultsViewProps> = ({
   const handleRemove = async () => {
     const copies = duplicateGroups.flatMap(group => ordered(group).slice(1)).filter(file => selectedFiles.has(file.id));
     if (!copies.length || isRemoving) return;
-    if (!window.confirm(`Permanently delete ${copies.length} selected file(s)?\n\nBrowser deletion does not use the Recycle Bin or Trash and cannot be undone. The KEEP file in each set will remain. Review visual matches before continuing.`)) return;
+    if (window.desktopAPI) {
+      if (!await window.desktopAPI.confirmRemoval(copies.map(file => (file.file as NativeFile).nativeId!))) return;
+    } else if (!window.confirm(`Permanently delete ${copies.length} selected file(s)?\n\nBrowser deletion does not use the Recycle Bin or Trash and cannot be undone. The KEEP file in each set will remain. Review visual matches before continuing.`)) return;
     setIsRemoving(true);
     const removed = new Set<string>();
     const failures: string[] = [];
@@ -150,7 +153,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({
               New Scan
             </button>
             {canRemove && <button onClick={handleRemove} disabled={selectedFiles.size === 0 || isRemoving} className="px-6 py-2 bg-red-600 text-white font-bold rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
-              {isRemoving ? 'Removing…' : `Remove selected (${selectedFiles.size})`}
+              {isRemoving ? 'Removing…' : `${window.desktopAPI ? 'Recycle selected' : 'Remove selected'} (${selectedFiles.size})`}
             </button>}
             <button
               onClick={handleCopyPaths}
@@ -163,7 +166,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({
         </div>
       </div>
        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-        <strong>Review your matches:</strong> Exact copies have identical contents; visual matches may differ. The largest file is kept by default. Choose “Keep this file” to protect a different copy. {canRemove ? 'Remove selected deletes files permanently, without the Recycle Bin or Trash.' : 'Direct removal requires a browser with folder access, such as Chrome or Edge on desktop. You can copy paths here for manual cleanup.'}
+        <strong>Review your matches:</strong> Exact copies have identical contents; visual matches may differ. The largest file is kept by default. Choose “Keep this file” to protect a different copy. {canRemove ? (window.desktopAPI ? 'Recycle selected moves files to the Recycle Bin after confirmation.' : 'Remove selected deletes files permanently, without the Recycle Bin or Trash.') : 'Direct removal requires a browser with folder access, such as Chrome or Edge on desktop. You can copy paths here for manual cleanup.'}
       </p>
 
       <fieldset disabled={isRemoving} className="flex flex-wrap items-end gap-4 p-4 mb-6 bg-white dark:bg-slate-800 rounded-lg">

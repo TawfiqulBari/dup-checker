@@ -1,6 +1,8 @@
 
 import { checkCancelled, waitForMedia } from './media';
 import { FileWithHandle, DuplicateGroup, ScanProgress } from '../types';
+import { imageBlob, nativeUrl, NativeFile } from './desktop';
+import { compareHashes } from './gpu';
 
 const HASH_WIDTH = 9;
 const HASH_HEIGHT = 8;
@@ -15,7 +17,7 @@ const calculateDHash = async (file: File): Promise<string> => {
   canvas.width = HASH_WIDTH;
   canvas.height = HASH_HEIGHT;
 
-  const bitmap = await createImageBitmap(file, { resizeWidth: HASH_WIDTH, resizeHeight: HASH_HEIGHT });
+  const bitmap = await createImageBitmap(await imageBlob(file), { resizeWidth: HASH_WIDTH, resizeHeight: HASH_HEIGHT });
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();
 
@@ -52,7 +54,7 @@ export const calculateVideoHashes = async (file: File, signal?: AbortSignal): Pr
   canvas.height = HASH_HEIGHT;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get canvas context');
-  const url = URL.createObjectURL(file);
+  const url = nativeUrl(file) || URL.createObjectURL(file);
   video.muted = true;
   video.preload = 'auto';
   try {
@@ -74,27 +76,17 @@ export const calculateVideoHashes = async (file: File, signal?: AbortSignal): Pr
     video.pause();
     video.removeAttribute('src');
     video.load();
-    URL.revokeObjectURL(url);
+    if (!nativeUrl(file)) URL.revokeObjectURL(url);
   }
 };
 
 // Exact file hash using SubtleCrypto API
 export const calculateFileHash = async (file: File): Promise<string> => {
+  if ((file as NativeFile).nativeId && typeof window !== 'undefined' && window.desktopAPI) return window.desktopAPI.hashFile((file as NativeFile).nativeId!);
   const buffer = await file.arrayBuffer();
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
-// Compare two perceptual hashes using Hamming distance
-const compareDHashes = (hash1: string, hash2: string): number => {
-  let distance = 0;
-  for (let i = 0; i < hash1.length; i++) {
-    if (hash1[i] !== hash2[i]) {
-      distance++;
-    }
-  }
-  return distance;
 };
 
 // Main duplicate detection logic
@@ -193,16 +185,10 @@ export const findDuplicates = async (
       const hash1 = perceptualHashes.get(file1.id) as string;
       if (!hash1) continue;
 
-      for (let j = i + 1; j < imageFiles.length; j++) {
-          const file2 = imageFiles[j];
-          if (processedFiles.has(file2.id)) continue;
-          const hash2 = perceptualHashes.get(file2.id) as string;
-          if (!hash2) continue;
+      const candidates = imageFiles.slice(i + 1).filter(file => !processedFiles.has(file.id) && perceptualHashes.has(file.id));
+      const distances = await compareHashes([hash1], candidates.map(file => perceptualHashes.get(file.id) as string), signal);
+      candidates.forEach((file, index) => { if (distances[index] <= 5) group.push(file); });
 
-          if (compareDHashes(hash1, hash2) <= 5) { // Threshold for similarity
-              group.push(file2);
-          }
-      }
       if (group.length > 1) {
           allDuplicates.push(group);
           group.forEach(f => processedFiles.add(f.id));
@@ -222,23 +208,13 @@ export const findDuplicates = async (
       const hashes1 = perceptualHashes.get(file1.id) as string[];
       if (!hashes1) continue;
 
-      for (let j = i + 1; j < videoFiles.length; j++) {
-          const file2 = videoFiles[j];
-          if (processedFiles.has(file2.id)) continue;
-          
-          const hashes2 = perceptualHashes.get(file2.id) as string[];
-          if (!hashes2) continue;
+      const candidates = videoFiles.slice(i + 1).filter(file => !processedFiles.has(file.id) && (perceptualHashes.get(file.id) as string[] | undefined)?.length === VIDEO_FRAMES_TO_CAPTURE);
+      const distances = await compareHashes(hashes1, candidates.flatMap(file => perceptualHashes.get(file.id) as string[]), signal);
+      candidates.forEach((file, index) => {
+        const matching = distances.slice(index * VIDEO_FRAMES_TO_CAPTURE, (index + 1) * VIDEO_FRAMES_TO_CAPTURE).filter(distance => distance <= 5).length;
+        if (matching >= 8) group.push(file);
+      });
 
-          let matchingFrames = 0;
-          for(let k = 0; k < Math.min(hashes1.length, hashes2.length); k++) {
-              if (compareDHashes(hashes1[k], hashes2[k]) <= 5) {
-                  matchingFrames++;
-              }
-          }
-          if (matchingFrames / VIDEO_FRAMES_TO_CAPTURE >= 0.8) { // 80% similarity
-              group.push(file2);
-          }
-      }
       if (group.length > 1) {
           allDuplicates.push(group);
           group.forEach(f => processedFiles.add(f.id));

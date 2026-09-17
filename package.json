@@ -1,14 +1,17 @@
 {
   "name": "dup-checker",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "desktop": "npm run build && electron .",
+    "build:windows": "npm run build && electron-builder --win nsis portable --x64 --publish never",
+    "test:desktop": "electron . --smoke-test"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -17,10 +20,14 @@
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^24.13.5",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "@webgpu/types": "^0.1.72",
     "autoprefixer": "^10.6.1",
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",
@@ -30,5 +37,36 @@
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
+  },
+  "description": "Local image and video duplicate checker with adaptive GPU comparison",
+  "author": "Tawfiqul Bari",
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "com.dupchecker.app",
+    "productName": "Dup-Checker",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/*.cjs",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "Dup-Checker-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Dup-Checker-Portable-${version}-${arch}.${ext}"
+    }
   }
 }

@@ -1,8 +1,9 @@
 import { FileWithHandle } from '../types';
+import { chooseNativeFolder } from './desktop';
 
 type DirectoryPicker = (options: { mode: 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
 export const getDirectoryPicker = (): DirectoryPicker | undefined =>
-  (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker?.bind(window);
+  window.desktopAPI ? chooseNativeFolder : (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker?.bind(window);
 
 export async function readFolder(directory: FileSystemDirectoryHandle, signal: AbortSignal): Promise<FileWithHandle[]> {
   const files: FileWithHandle[] = [];

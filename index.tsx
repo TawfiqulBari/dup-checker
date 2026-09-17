@@ -14,3 +14,7 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+if (window.desktopAPI?.smokeTest) {
+  import('./services/desktopSmoke').then(module => module.runDesktopSmoke()).then(result => window.desktopAPI!.reportSmoke(result)).catch(error => window.desktopAPI!.reportSmoke({ ok: false, error: String(error) }));
+}
