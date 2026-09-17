@@ -2,14 +2,15 @@ import React from 'react';
 
 interface WelcomeScreenProps {
   onSelectFolder: () => void;
+  onCompareFolders: () => void;
 }
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectFolder }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectFolder, onCompareFolders }) => {
   return (
     <div className="text-center max-w-2xl mx-auto mt-16 p-8 bg-white dark:bg-slate-800 rounded-lg shadow-lg">
       <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-4">Find Duplicate Files</h2>
       <p className="text-slate-600 dark:text-slate-300 mb-8">
-        Select a folder to scan for visually similar images and videos. Dup-Checker analyzes file content, not just names, to find true duplicates.
+        Select a folder to scan for visually similar images and videos. Dup-Checker analyzes file content, not just names, to find exact copies and potential visual matches. Review visual matches before removing files.
       </p>
       <button
         onClick={onSelectFolder}
@@ -20,6 +21,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onSelectFolder }) => {
         </svg>
         Select Folder to Scan
       </button>
+      <button onClick={onCompareFolders} className="block mx-auto mt-4 px-6 py-3 rounded-md border border-indigo-400 text-indigo-600 dark:text-indigo-400 font-semibold">Compare two folders</button>
       <p className="text-sm text-slate-500 dark:text-slate-400 mt-6">
           All processing is done securely in your browser. Your files are never uploaded.
       </p>

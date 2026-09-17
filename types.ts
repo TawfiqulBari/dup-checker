@@ -2,6 +2,7 @@ export interface FileWithHandle {
   id: string;
   file: File;
   handle?: FileSystemFileHandle;
+  parentHandle?: FileSystemDirectoryHandle;
   path: string;
   metadata: {
     size: number;
@@ -9,6 +10,8 @@ export interface FileWithHandle {
     duration?: number;
   };
   thumbnail: string;
+  contentHash?: string;
+  folderSide?: 'first' | 'second';
 }
 
 export type DuplicateGroup = FileWithHandle[];

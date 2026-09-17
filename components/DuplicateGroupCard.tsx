@@ -2,26 +2,20 @@
 import React from 'react';
 import { DuplicateGroup, FileWithHandle } from '../types';
 import FileCard from './FileCard';
+import { sortGroup, toggleDuplicates, isExactGroup } from '../services/selection';
 
 interface DuplicateGroupCardProps {
   group: DuplicateGroup;
   selectedFiles: Set<string>;
   onSelectionChange: (newSelection: Set<string>) => void;
+  keeperId?: string;
+  onKeep: (id: string) => void;
+  onCompare: () => void;
 }
 
-const DuplicateGroupCard: React.FC<DuplicateGroupCardProps> = ({ group, selectedFiles, onSelectionChange }) => {
+const DuplicateGroupCard: React.FC<DuplicateGroupCardProps> = ({ group, selectedFiles, onSelectionChange, keeperId, onKeep, onCompare }) => {
   const handleSelectAllDuplicates = () => {
-    const newSelection = new Set(selectedFiles);
-    const isAllSelected = group.slice(1).every(file => newSelection.has(file.id));
-
-    group.slice(1).forEach(file => {
-      if (isAllSelected) {
-        newSelection.delete(file.id);
-      } else {
-        newSelection.add(file.id);
-      }
-    });
-    onSelectionChange(newSelection);
+    onSelectionChange(toggleDuplicates(group, selectedFiles, keeperId));
   };
   
   const handleFileToggle = (fileId: string) => {
@@ -34,20 +28,20 @@ const DuplicateGroupCard: React.FC<DuplicateGroupCardProps> = ({ group, selected
     onSelectionChange(newSelection);
   };
 
-  const sortedGroup = [...group].sort((a, b) => b.metadata.size - a.metadata.size);
+  const sortedGroup = sortGroup(group, keeperId);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md overflow-hidden">
       <div className="p-4 bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-          Found {group.length} duplicates
+          <span className={isExactGroup(group) ? 'text-green-600 dark:text-green-400' : 'text-amber-700 dark:text-amber-400'}>{isExactGroup(group) ? 'Exact copies' : 'Visually similar'}</span> · {group.length} files
         </h3>
-        <button
+        <div className="flex gap-4"><button onClick={onCompare} className="text-sm font-medium text-indigo-600 dark:text-indigo-400">Compare</button><button
           onClick={handleSelectAllDuplicates}
           className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
         >
-          Select all duplicates
-        </button>
+          {sortedGroup.slice(1).every(file => selectedFiles.has(file.id)) ? 'Clear selection' : 'Select copies'}
+        </button></div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
         {sortedGroup.map((file, index) => (
@@ -57,6 +51,7 @@ const DuplicateGroupCard: React.FC<DuplicateGroupCardProps> = ({ group, selected
             isOriginal={index === 0}
             isSelected={selectedFiles.has(file.id)}
             onToggleSelection={handleFileToggle}
+            onKeep={() => onKeep(file.id)}
           />
         ))}
       </div>

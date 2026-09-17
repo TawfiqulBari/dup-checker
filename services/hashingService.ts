@@ -1,5 +1,5 @@
 
-// FIX: Import missing types 'DuplicateGroup' and 'ScanProgress'.
+import { checkCancelled, waitForMedia } from './media';
 import { FileWithHandle, DuplicateGroup, ScanProgress } from '../types';
 
 const HASH_WIDTH = 9;
@@ -20,12 +20,16 @@ const calculateDHash = async (file: File): Promise<string> => {
   bitmap.close();
 
   const imageData = ctx.getImageData(0, 0, HASH_WIDTH, HASH_HEIGHT);
+  return hashPixels(imageData.data);
+};
+
+const hashPixels = (pixels: Uint8ClampedArray): string => {
   const grayscale = new Uint8Array(HASH_WIDTH * HASH_HEIGHT);
 
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    const r = imageData.data[i];
-    const g = imageData.data[i + 1];
-    const b = imageData.data[i + 2];
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i];
+    const g = pixels[i + 1];
+    const b = pixels[i + 2];
     grayscale[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
   }
 
@@ -41,55 +45,37 @@ const calculateDHash = async (file: File): Promise<string> => {
 };
 
 // Frame capture and hashing for videos
-export const calculateVideoHashes = async (file: File): Promise<string[]> => {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-    if (!ctx) return reject('Could not get canvas context');
-
-    const hashes: string[] = [];
-    const url = URL.createObjectURL(file);
+export const calculateVideoHashes = async (file: File, signal?: AbortSignal): Promise<string[]> => {
+  const video = document.createElement('video');
+  const canvas = document.createElement('canvas');
+  canvas.width = HASH_WIDTH;
+  canvas.height = HASH_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not get canvas context');
+  const url = URL.createObjectURL(file);
+  video.muted = true;
+  video.preload = 'auto';
+  try {
+    const loaded = waitForMedia(video, 'loadedmetadata', signal);
     video.src = url;
-    video.muted = true;
-    
-    let framesCaptured = 0;
-    let seekInterval: number;
-
-    const captureFrame = async () => {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg'));
-      if (blob) {
-        hashes.push(await calculateDHash(new File([blob], 'frame.jpg', { type: 'image/jpeg' })));
-      }
-      framesCaptured++;
-
-      if (framesCaptured >= VIDEO_FRAMES_TO_CAPTURE) {
-        video.pause();
-        URL.revokeObjectURL(url);
-        resolve(hashes);
-      } else {
-        video.currentTime += seekInterval;
-      }
-    };
-
-    video.addEventListener('loadedmetadata', () => {
-      seekInterval = video.duration / (VIDEO_FRAMES_TO_CAPTURE + 1);
-      video.currentTime = seekInterval;
-    });
-
-    video.addEventListener('seeked', captureFrame);
-
-    video.addEventListener('error', (e) => {
-      URL.revokeObjectURL(url);
-      reject(`Error loading video: ${e.message}`);
-    });
-
+    await loaded;
+    if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('Invalid video duration');
+    const hashes: string[] = [];
+    for (let i = 1; i <= VIDEO_FRAMES_TO_CAPTURE; i++) {
+      checkCancelled(signal);
+      const sought = waitForMedia(video, 'seeked', signal);
+      video.currentTime = video.duration * i / (VIDEO_FRAMES_TO_CAPTURE + 1);
+      await sought;
+      ctx.drawImage(video, 0, 0, HASH_WIDTH, HASH_HEIGHT);
+      hashes.push(hashPixels(ctx.getImageData(0, 0, HASH_WIDTH, HASH_HEIGHT).data));
+    }
+    return hashes;
+  } finally {
+    video.pause();
+    video.removeAttribute('src');
     video.load();
-  });
+    URL.revokeObjectURL(url);
+  }
 };
 
 // Exact file hash using SubtleCrypto API
@@ -114,7 +100,9 @@ const compareDHashes = (hash1: string, hash2: string): number => {
 // Main duplicate detection logic
 export const findDuplicates = async (
   files: FileWithHandle[],
-  setProgress: (progress: ScanProgress) => void
+  setProgress: (progress: ScanProgress) => void,
+  signal?: AbortSignal,
+  onWarning: (message: string) => void = () => {},
 ): Promise<DuplicateGroup[]> => {
   const allDuplicates: DuplicateGroup[] = [];
   const processedFiles = new Set<string>();
@@ -133,14 +121,23 @@ export const findDuplicates = async (
   // Step 1: Find exact duplicates with file hashing
   setProgress({ status: 'Calculating file hashes...', processed: 0, total: totalFiles });
   for (const file of files) {
-      const hash = await calculateFileHash(file.file);
-      fileHashes.set(file.id, hash);
+      checkCancelled(signal);
+      try {
+        const hash = await calculateFileHash(file.file);
+        checkCancelled(signal);
+        fileHashes.set(file.id, hash);
+        file.contentHash = hash;
+      } catch (error) {
+        checkCancelled(signal);
+        onWarning('Could not read ' + file.path);
+      }
       updateProgress('Calculating file hashes...');
   }
   
   const filesByHash = new Map<string, FileWithHandle[]>();
   for (const file of files) {
-      const hash = fileHashes.get(file.id)!;
+      const hash = fileHashes.get(file.id);
+      if (!hash) continue;
       if (!filesByHash.has(hash)) filesByHash.set(hash, []);
       filesByHash.get(hash)!.push(file);
   }
@@ -160,18 +157,26 @@ export const findDuplicates = async (
   setProgress({ status: 'Hashing images...', processed: 0, total: imageFiles.length });
   for (let i = 0; i < imageFiles.length; i++) {
     const file = imageFiles[i];
-    perceptualHashes.set(file.id, await calculateDHash(file.file));
+    checkCancelled(signal);
+    try {
+      perceptualHashes.set(file.id, await calculateDHash(file.file));
+    } catch (error) {
+      checkCancelled(signal);
+      onWarning('Visual comparison unavailable for ' + file.path);
+    }
     setProgress({ status: 'Hashing images...', processed: i + 1, total: imageFiles.length });
   }
 
   // Step 3: Perceptual hash for remaining videos
   setProgress({ status: 'Hashing videos...', processed: 0, total: videoFiles.length });
   for (let i = 0; i < videoFiles.length; i++) {
+    checkCancelled(signal);
     const file = videoFiles[i];
     try {
-      perceptualHashes.set(file.id, await calculateVideoHashes(file.file));
+      perceptualHashes.set(file.id, await calculateVideoHashes(file.file, signal));
     } catch (e) {
-      console.error(`Could not process video ${file.path}:`, e);
+      checkCancelled(signal);
+      onWarning('Visual comparison unavailable for ' + file.path);
     }
     setProgress({ status: 'Hashing videos...', processed: i + 1, total: videoFiles.length });
   }
@@ -179,6 +184,8 @@ export const findDuplicates = async (
   // Step 4: Compare image hashes
   setProgress({ status: 'Comparing images...', processed: 0, total: imageFiles.length });
   for (let i = 0; i < imageFiles.length; i++) {
+      checkCancelled(signal);
+      if (i % 20 === 0) await new Promise(resolve => setTimeout(resolve, 0));
       const file1 = imageFiles[i];
       if (processedFiles.has(file1.id)) continue;
       
@@ -206,6 +213,8 @@ export const findDuplicates = async (
   // Step 5: Compare video hashes
   setProgress({ status: 'Comparing videos...', processed: 0, total: videoFiles.length });
    for (let i = 0; i < videoFiles.length; i++) {
+      checkCancelled(signal);
+      if (i % 20 === 0) await new Promise(resolve => setTimeout(resolve, 0));
       const file1 = videoFiles[i];
       if (processedFiles.has(file1.id)) continue;
       
@@ -237,6 +246,7 @@ export const findDuplicates = async (
        setProgress({ status: 'Comparing videos...', processed: i + 1, total: videoFiles.length });
   }
 
+  checkCancelled(signal);
   setProgress({ status: 'Done', processed: totalFiles, total: totalFiles });
   return allDuplicates;
 };
